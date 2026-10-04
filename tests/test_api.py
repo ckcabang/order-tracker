@@ -1,16 +1,3 @@
-import pytest
-from fastapi.testclient import TestClient
-
-from app import main
-
-
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(main, "DB_PATH", tmp_path / "orders.db")
-    with TestClient(main.app) as test_client:
-        yield test_client
-
-
 def test_health_and_seeded_orders(client):
     assert client.get("/healthz").json() == {"status": "ok"}
     orders = client.get("/api/orders").json()

@@ -1,0 +1,62 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: order-tracker
+    folder: Order Tracker
+    interval: 30s
+    rules:
+      - uid: order-tracker-5xx
+        title: Order Tracker 5xx responses
+        condition: C
+        data:
+          # 5xx responses per endpoint over the last 5 minutes.
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              refId: A
+              instant: true
+              range: false
+              expr: >-
+                sum by (http_request_method, http_route) (
+                  increase(http_server_request_duration_seconds_count{job="order-tracker", http_response_status_code=~"5.."}[5m])
+                )
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        # A 5xx series only exists after the first 5xx response. Until then the
+        # query returns nothing, which is healthy, not missing data. Once a
+        # series exists, a quiet window evaluates to 0 and the rule resolves.
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels:
+          service: order-tracker
+          severity: critical
+        annotations:
+          __dashboardUid__: order-tracker
+          __panelId__: "6"
+          summary: >-
+            {{ $labels.http_request_method }} {{ $labels.http_route }} returned
+            {{ printf "%.0f" $values.B.Value }} 5xx responses in the last 5 minutes
+          description: >-
+            Endpoint: {{ $labels.http_request_method }} {{ $labels.http_route }}.
+            Window: last 5 minutes.
+            Dashboard: http://localhost:3000/d/order-tracker/order-tracker?var-route={{ $labels.http_route }}

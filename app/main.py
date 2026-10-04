@@ -5,13 +5,18 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
+from opentelemetry.trace import SpanKind
 from pydantic import BaseModel, Field
+
+from app.telemetry import observe_order_lookup, setup_telemetry, tracer
 
 
 DB_PATH = Path(os.getenv("ORDER_DB_PATH", "data/orders.db"))
 STATUSES = {"received", "preparing", "shipped", "delivered"}
+
+setup_telemetry()
 
 
 def connect():
@@ -98,13 +103,27 @@ def list_orders():
     return [as_dict(row) for row in rows]
 
 
-@app.get("/api/orders/{order_id}")
-def get_order(order_id: str):
-    with connect() as db:
-        row = db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+def fetch_order(order_id):
+    with tracer.start_as_current_span(
+        "SELECT orders",
+        kind=SpanKind.CLIENT,
+        attributes={
+            "db.system.name": "sqlite",
+            "db.operation.name": "SELECT",
+            "db.collection.name": "orders",
+        },
+    ):
+        with connect() as db:
+            row = db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
     if row is None:
         raise HTTPException(404, "Order not found")
     return order_detail(row)
+
+
+@app.get("/api/orders/{order_id}")
+def get_order(order_id: str, request: Request):
+    with observe_order_lookup(request, order_id):
+        return fetch_order(order_id)
 
 
 @app.post("/api/orders", status_code=201)
@@ -118,7 +137,7 @@ def create_order(order: NewOrder):
             (order_id, order.customer, order.item, order.priority, "received",
              datetime.now(timezone.utc).isoformat()),
         )
-    return get_order(order_id)
+    return fetch_order(order_id)
 
 
 @app.patch("/api/orders/{order_id}")
@@ -132,4 +151,4 @@ def update_status(order_id: str, update: StatusUpdate):
         )
     if cursor.rowcount == 0:
         raise HTTPException(404, "Order not found")
-    return get_order(order_id)
+    return fetch_order(order_id)

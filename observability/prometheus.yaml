@@ -1,0 +1,9 @@
+# Metrics arrive from the Collector through the OTLP receiver
+# (--web.enable-otlp-receiver), so there is nothing to scrape. The OTLP
+# service.name becomes `job` and service.instance.id becomes `instance`.
+global:
+  evaluation_interval: 15s
+
+storage:
+  tsdb:
+    out_of_order_time_window: 30m

@@ -1,0 +1,21 @@
+apiVersion: 1
+
+# Send every alert to the incident-response service (incident-response/),
+# which saves the telemetry and starts the coding agent.
+contactPoints:
+  - orgId: 1
+    name: incident-response
+    receivers:
+      - uid: incident-response-webhook
+        type: webhook
+        settings:
+          url: $INCIDENT_RESPONSE_URL
+          httpMethod: POST
+
+policies:
+  - orgId: 1
+    receiver: incident-response
+    group_by: [grafana_folder, alertname]
+    group_wait: 10s
+    group_interval: 1m
+    repeat_interval: 4h
