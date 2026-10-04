@@ -59,6 +59,8 @@ def receive_alerts(payload: dict, background_tasks: BackgroundTasks):
     created, duplicates, resolved = [], [], []
 
     for alert in payload.get("alerts", []):
+        # Grafana always sets startsAt; hand-written test alerts may not.
+        alert = {**alert, "startsAt": alert.get("startsAt") or received_at}
         incident = incident_id(alert)
         incident_dir = INCIDENTS_DIR / incident
 

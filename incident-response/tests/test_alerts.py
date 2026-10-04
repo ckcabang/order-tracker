@@ -147,3 +147,15 @@ def test_agent_runs_headless_in_repo(tmp_path, monkeypatch):
     assert "`incident-response/incidents/i1/`" in kwargs["input"]
     assert "incident-response/incidents/i1/report.md" in kwargs["input"]
     assert status["state"] == "finished" and status["report_written"]
+
+
+def test_alert_without_start_time_or_fingerprint(client, tmp_path):
+    alert = {"status": "firing", "labels": {"alertname": "ResponderTest", "test": "true"},
+             "annotations": {"summary": "Test notification; no incident to fix"}}
+    response = client.post("/alerts", json={"alerts": [alert]})
+    assert response.status_code == 202
+    [incident] = response.json()["created"]
+    saved = json.loads((tmp_path / incident / "alert.json").read_text())
+    assert saved["alert"]["startsAt"] == saved["received_at"]
+    assert saved["endpoint"] == {"method": None, "route": None}
+    assert len(client.started) == 1
